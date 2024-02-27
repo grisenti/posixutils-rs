@@ -1,4 +1,131 @@
-use std::str::FromStr;
+//
+// Copyright (c) 2024 Jeff Garzik
+//
+// This file is part of the posixutils-rs project covered under
+// the MIT License.  For the full license text, please see the LICENSE
+// file in the root directory of this project.
+// SPDX-License-Identifier: MIT
+//
+
+use std::iter;
+
+#[derive(Debug)]
+struct SyntaxError {
+    message: String,
+}
+
+enum Token {
+    CurrentLine,
+    LastLine,
+    Number(u64),
+    Mark(char),
+    RegexForward(String),
+    RegexBack(String),
+    Offset(isize),
+    Command(char),
+    EOF,
+}
+
+impl SyntaxError {
+    fn new(message: String) -> Self {
+        SyntaxError { message }
+    }
+}
+
+fn tokenizer(input: &str) -> Result<Vec<Token>, SyntaxError> {
+    let mut tokens: Vec<Token> = Vec::new();
+    let mut iter = input.chars().peekable();
+
+    while let Some(ch) = iter.next() {
+        match ch {
+            ch if ch.is_whitespace() => continue,
+            '.' => tokens.push(Token::CurrentLine),
+            '$' => tokens.push(Token::LastLine),
+            'a'..='z' | 'A'..='Z' => {
+                tokens.push(Token::Command(ch));
+            }
+            '1'..='9' => {
+                let n: u64 = iter::once(ch)
+                    .chain(iter::from_fn(|| {
+                        iter.by_ref().next_if(|s| s.is_ascii_digit())
+                    }))
+                    .collect::<String>()
+                    .parse()
+                    .unwrap();
+
+                tokens.push(Token::Number(n));
+            }
+            '\'' => match iter.next() {
+                None => return Err(SyntaxError::new(String::from("missing mark char"))),
+                Some(mark_ch) => {
+                    if mark_ch.is_ascii_alphabetic() {
+                        tokens.push(Token::Mark(mark_ch));
+                    } else {
+                        return Err(SyntaxError::new(format!(
+                            "unrecognized mark character {}",
+                            ch
+                        )));
+                    }
+                }
+            },
+            '/' | '?' => {
+                let mut bre = String::new();
+                let mut escaped = false;
+                loop {
+                    let bre_ch_res = iter.next();
+                    if bre_ch_res.is_none() {
+                        return Err(SyntaxError::new(String::from("unterminated regex")));
+                    }
+
+                    let bre_ch = bre_ch_res.unwrap();
+                    match bre_ch {
+                        // regex terminator
+                        '/' | '?' => {
+                            if escaped {
+                                bre.push(bre_ch);
+                            } else {
+                                if ch == '/' {
+                                    tokens.push(Token::RegexForward(bre));
+                                } else {
+                                    tokens.push(Token::RegexBack(bre));
+                                }
+                                break;
+                            }
+                        }
+
+                        // escape char
+                        '\\' => {
+                            if escaped {
+                                bre.push(bre_ch);
+                            } else {
+                                escaped = true;
+                            }
+                        }
+
+                        // everything else
+                        _ => bre.push(bre_ch),
+                    }
+                }
+            }
+
+            '+' | '-' => {
+                let n: isize = iter::once(ch)
+                    .chain(iter::from_fn(|| {
+                        iter.by_ref().next_if(|s| s.is_ascii_digit())
+                    }))
+                    .collect::<String>()
+                    .parse()
+                    .unwrap();
+
+                tokens.push(Token::Offset(n));
+            }
+            _ => return Err(SyntaxError::new(format!("unrecognized character {}", ch))),
+        }
+    }
+
+    tokens.push(Token::EOF);
+    Ok(tokens)
+}
 
 #[derive(Debug)]
 pub enum Command {
@@ -25,76 +152,15 @@ pub enum PrintMode {
 }
 
 impl Command {
+    fn from_tokens(tokens: Vec<Token>) -> Result<Command, String> {
+        Err(String::from("not implemented yet"))
+    }
+
     pub fn from_line(line: &str) -> Result<Command, String> {
-        let mut parts = line.splitn(2, ' ');
-        let cmd = match parts.next() {
-            Some("a") => Command::Append(String::from(parts.next().unwrap_or(""))),
-            Some("c") => Command::Change(String::from(parts.next().unwrap_or(""))),
-            Some("d") => Command::Delete,
-            Some("g") => {
-                let mut g_parts = parts.next().unwrap().splitn(4, '/');
-                let re = g_parts.next().unwrap().to_string();
-                let replacement = g_parts.next().unwrap().to_string();
-                let mut global = true;
-                let mut count = false;
-                let mut print = false;
-                for flag in g_parts {
-                    if flag == "g" {
-                        global = true;
-                    } else if flag == "n" {
-                        count = true;
-                    } else if flag == "p" {
-                        print = true;
-                    } else {
-                        return Err(format!("Invalid flag: {}", flag));
-                    }
-                }
-                Command::Global(re, replacement, global, count, print)
-            }
-            Some("G") => {
-                let mut g_parts = parts.next().unwrap().splitn(2, '/');
-                let re = g_parts.next().unwrap().to_string();
-                let commands = match g_parts.next() {
-                    Some(cmds) => parse_command_list(cmds)?,
-                    None => vec![],
-                };
-                Command::InteractiveGlobalNotMatched(re, commands)
-            }
-            Some("i") => Command::Append(String::from(parts.next().unwrap_or(""))),
-            Some("j") => Command::Move(1),
-            Some("k") => Command::Move(-1),
-            Some("m") => Command::Move(isize::from_str(parts.next().unwrap_or("")).unwrap()),
-            Some("n") => Command::Print(PrintMode::NextLine),
-            Some("p") => Command::Print(PrintMode::Line),
-            Some("q") => Command::Quit,
-            Some("r") => Command::Read(String::from(parts.next().unwrap_or(""))),
-            Some("s") => {
-                let mut s_parts = parts.next().unwrap().splitn(4, '/');
-                let re = s_parts.next().unwrap().to_string();
-                let replacement = s_parts.next().unwrap().to_string();
-                Command::Global(re, replacement, false, false, false)
-            }
-            Some("t") => Command::Move(isize::from_str(parts.next().unwrap_or("")).unwrap()),
-            Some("u") => Command::NoOp,
-            Some("v") => {
-                let mut v_parts = parts.next().unwrap().splitn(2, '/');
-                let re = v_parts.next().unwrap().to_string();
-                let commands = match v_parts.next() {
-                    Some(cmds) => parse_command_list(cmds)?,
-                    None => vec![],
-                };
-                Command::GlobalNotMatched(re, commands)
-            }
-            Some("w") => {
-                let filename = parts.next().map(|s| s.to_string());
-                Command::Write(filename)
-            }
-            Some("!") => {
-                return Err(String::from("! command not supported"));
-            }
-            _ => return Err(format!("Invalid command: {}", line)),
-        };
-        Ok(cmd)
+        match tokenizer(line) {
+            Err(e) => Err(e.message),
+            Ok(tokens) => Self::from_tokens(tokens),
+        }
     }
 }
 
