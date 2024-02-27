@@ -10,8 +10,10 @@
 extern crate clap;
 extern crate plib;
 
+mod buffer;
 mod command;
 
+use buffer::{Buffer, Chunk};
 use clap::Parser;
 use command::Command;
 use gettextrs::{bind_textdomain_codeset, textdomain};
@@ -25,62 +27,6 @@ const MAX_CHUNK: usize = 1000000;
 #[command(author, version, about, long_about)]
 struct Args {
     pathname: String,
-}
-
-struct Chunk {
-    data: String,
-
-    first_line: u64,
-    last_line: u64,
-}
-
-impl Chunk {
-    fn new(line_no: u64) -> Chunk {
-        Chunk {
-            data: String::new(),
-            first_line: line_no,
-            last_line: line_no,
-        }
-    }
-
-    fn from(s: &str) -> Chunk {
-        Chunk {
-            data: String::from(s),
-            first_line: 0,
-            last_line: 0,
-        }
-    }
-
-    fn len(&self) -> usize {
-        self.data.len()
-    }
-
-    fn push_line(&mut self, line: &str) {
-        self.data.push_str(line);
-        self.last_line = self.last_line + 1;
-    }
-}
-
-struct Buffer {
-    chunks: Vec<Chunk>,
-
-    pathname: String,
-    last_line: u64,
-}
-
-impl Buffer {
-    fn new() -> Buffer {
-        Buffer {
-            chunks: Vec::new(),
-            pathname: String::new(),
-            last_line: 0,
-        }
-    }
-
-    fn append(&mut self, chunk: Chunk) {
-        self.last_line = chunk.last_line;
-        self.chunks.push(chunk);
-    }
 }
 
 struct Editor {
