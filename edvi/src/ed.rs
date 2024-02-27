@@ -102,12 +102,14 @@ impl Editor {
     fn push_cmd(&mut self, cmd: &Command) -> bool {
         println!("COMMAND: {:?}", cmd);
 
-	let mut retval = true;
-	match cmd {
-	    Command::Quit => { retval = false; },
+        let mut retval = true;
+        match cmd {
+            Command::Quit => {
+                retval = false;
+            }
 
-	    _ => {},
-	}
+            _ => {}
+        }
 
         retval
     }
@@ -151,11 +153,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-	if input.is_empty() {
-	    break;
-	}
+        if input.is_empty() {
+            break;
+        }
 
-	println!("LINE={}", input);
+        println!("LINE={}", input);
 
         if !state.push_line(&input) {
             break;
