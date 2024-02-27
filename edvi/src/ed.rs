@@ -16,7 +16,10 @@ use clap::Parser;
 use command::Command;
 use gettextrs::{bind_textdomain_codeset, textdomain};
 use plib::PROJECT_NAME;
-use std::io;
+use std::fs;
+use std::io::{self, BufRead, BufReader};
+
+const MAX_CHUNK: usize = 1000000;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about)]
@@ -32,11 +35,11 @@ struct Chunk {
 }
 
 impl Chunk {
-    fn new() -> Chunk {
+    fn new(line_no: u64) -> Chunk {
         Chunk {
             data: String::new(),
-            first_line: 0,
-            last_line: 0,
+            first_line: line_no,
+            last_line: line_no,
         }
     }
 
@@ -46,6 +49,15 @@ impl Chunk {
             first_line: 0,
             last_line: 0,
         }
+    }
+
+    fn len(&self) -> usize {
+        self.data.len()
+    }
+
+    fn push_line(&mut self, line: &str) {
+        self.data.push_str(line);
+        self.last_line = self.last_line + 1;
     }
 }
 
@@ -64,11 +76,18 @@ impl Buffer {
             last_line: 0,
         }
     }
+
+    fn append(&mut self, chunk: Chunk) {
+        self.last_line = chunk.last_line;
+        self.chunks.push(chunk);
+    }
 }
 
 struct Editor {
     in_cmd_mode: bool,
     buf: Buffer,
+
+    cur_line: u64,
 
     inputs: Vec<String>,
 }
@@ -78,6 +97,7 @@ impl Editor {
         Editor {
             in_cmd_mode: true,
             buf: Buffer::new(),
+            cur_line: 0,
             inputs: Vec::new(),
         }
     }
@@ -131,6 +151,38 @@ impl Editor {
             self.push_input_line(line)
         }
     }
+
+    fn read_file(&mut self, pathname: &str) -> io::Result<()> {
+        let file = fs::File::open(pathname)?;
+        let mut reader = BufReader::new(file);
+        let mut line_no = 1;
+        let mut cur_chunk = Chunk::new(line_no);
+
+        loop {
+            let mut line = String::new();
+            let rc = reader.read_line(&mut line)?;
+            if rc == 0 {
+                break;
+            }
+
+            line_no = line_no + 1;
+
+            cur_chunk.push_line(&line);
+            if cur_chunk.len() > MAX_CHUNK {
+                self.buf.append(cur_chunk);
+                cur_chunk = Chunk::new(line_no);
+            }
+        }
+
+        if cur_chunk.len() > 0 {
+            self.buf.append(cur_chunk);
+        }
+
+        self.buf.pathname = String::from(pathname);
+        self.cur_line = line_no - 1;
+
+        Ok(())
+    }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -142,11 +194,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut state = Editor::new();
 
+    match state.read_file(&args.pathname) {
+        Ok(()) => {}
+        Err(e) => {
+            eprintln!("{}: {}", args.pathname, e);
+        }
+    }
+
     loop {
         let mut input = String::new();
 
         match io::stdin().read_line(&mut input) {
-            Ok(n) => {}
+            Ok(_n) => {}
             Err(e) => {
                 eprintln!("stdout: {}", e);
                 std::process::exit(1);
