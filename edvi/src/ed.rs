@@ -15,13 +15,13 @@ mod command;
 
 use buffer::{Buffer, Chunk};
 use clap::Parser;
-use command::Command;
+use command::{Address, Command};
 use gettextrs::{bind_textdomain_codeset, textdomain};
 use plib::PROJECT_NAME;
 use std::fs;
 use std::io::{self, BufRead, BufReader};
 
-const MAX_CHUNK: usize = 1000000;
+const ERR_STR: &str = "?";
 
 /// ed - edit text
 #[derive(Parser, Debug)]
@@ -39,11 +39,36 @@ struct Args {
     file: Option<String>,
 }
 
+#[derive(Debug)]
+enum EdOp {
+    ReadInputLines,
+    GotoLine(usize),
+    Insert(bool),
+}
+
+#[derive(Debug)]
+struct EdBundle {
+    ops: Vec<EdOp>,
+}
+
+impl EdBundle {
+    fn new() -> EdBundle {
+        EdBundle { ops: Vec::new() }
+    }
+
+    fn push(&mut self, op: EdOp) {
+        self.ops.push(op);
+    }
+}
+
+#[derive(Debug)]
 struct Editor {
     in_cmd_mode: bool,
     buf: Buffer,
 
     inputs: Vec<String>,
+
+    exec_queue: Vec<EdBundle>,
 }
 
 impl Editor {
@@ -52,13 +77,45 @@ impl Editor {
             in_cmd_mode: true,
             buf: Buffer::new(),
             inputs: Vec::new(),
+            exec_queue: Vec::new(),
         }
+    }
+
+    fn bottom_half(&mut self) -> bool {
+        while !self.exec_queue.is_empty() {
+            let bundle = self.exec_queue.remove(0);
+            for op in bundle.ops {
+                match op {
+                    EdOp::ReadInputLines => {
+                        self.input_begin();
+                    }
+
+                    EdOp::GotoLine(line_no) => {
+                        self.buf.set_cur_line(line_no);
+                    }
+
+                    EdOp::Insert(insert_before) => {
+                        if self.inputs.len() == 0 {
+                            continue;
+                        }
+                        let chunks = buffer::as_chunks(&self.inputs);
+                        self.inputs.clear();
+                        self.buf.insert(self.buf.cur_line, insert_before, &chunks);
+                    }
+                }
+            }
+        }
+
+        true
+    }
+
+    fn input_begin(&mut self) {
+        self.in_cmd_mode = false;
+        assert_eq!(self.inputs.len(), 0);
     }
 
     fn input_end(&mut self) -> bool {
         self.in_cmd_mode = true;
-
-        // todo: flush to buffer...
 
         true
     }
@@ -72,6 +129,10 @@ impl Editor {
         }
     }
 
+    fn resolve_address(&self, _addr_opt: &Option<Address>) -> Result<usize, String> {
+        todo!()
+    }
+
     fn push_cmd(&mut self, cmd: &Command) -> bool {
         println!("COMMAND: {:?}", cmd);
 
@@ -79,6 +140,32 @@ impl Editor {
         match cmd {
             Command::Quit => {
                 retval = false;
+            }
+
+            Command::Insert(addr_opt, mut insert_before) => {
+                let mut bundle = EdBundle::new();
+                bundle.push(EdOp::ReadInputLines);
+
+                let line_no: usize = match self.resolve_address(addr_opt) {
+                    Ok(line_no) => {
+                        if insert_before && line_no == 0 {
+                            1
+                        } else if !insert_before && line_no == 0 {
+                            insert_before = true;
+                            1
+                        } else {
+                            line_no
+                        }
+                    }
+                    Err(_) => {
+                        println!("{}", ERR_STR);
+                        return true;
+                    }
+                };
+                bundle.push(EdOp::GotoLine(line_no));
+                bundle.push(EdOp::Insert(insert_before));
+
+                self.exec_queue.push(bundle);
             }
 
             _ => {}
@@ -117,11 +204,11 @@ impl Editor {
                 break;
             }
 
-            cur_chunk.push_line(&line);
-            if cur_chunk.len() > MAX_CHUNK {
+            if (cur_chunk.len() + line.len()) > buffer::MAX_CHUNK {
                 self.buf.append(cur_chunk);
                 cur_chunk = Chunk::new();
             }
+            cur_chunk.push_line(&line);
         }
 
         if cur_chunk.len() > 0 {
@@ -167,7 +254,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         println!("LINE={}", input.trim_end());
 
-        if !ed.push_line(&input) {
+        if !ed.push_line(&input) || !ed.bottom_half() {
             break;
         }
     }

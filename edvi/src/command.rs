@@ -164,7 +164,7 @@ impl Address {
 
 #[derive(Debug)]
 pub enum Command {
-    Append(Option<Address>),
+    Insert(Option<Address>, bool),
     Change(String),
     Copy(usize),
     Delete,
@@ -253,9 +253,15 @@ impl Command {
                 ParseState::Command => match token {
                     Token::Command('a') => {
                         if addrvec.len() > 1 {
-                            return Err("append command takes at most one address".to_string());
+                            return Err("Append command takes at most one address".to_string());
                         }
-                        return Ok(Command::Append(addrvec.pop()));
+                        return Ok(Command::Insert(addrvec.pop(), false));
+                    }
+                    Token::Command('i') => {
+                        if addrvec.len() > 1 {
+                            return Err("Insert command takes at most one address".to_string());
+                        }
+                        return Ok(Command::Insert(addrvec.pop(), true));
                     }
                     Token::Command('q') => {
                         if addrvec.len() > 0 {
