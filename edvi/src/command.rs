@@ -200,7 +200,6 @@ impl Command {
         let mut state = ParseState::Address;
 
         while tokens.len() > 0 {
-            let mut done_with_token = false;
             let token = tokens.remove(0);
             match state {
                 // todo: handle separator indicating implicit addressing
@@ -212,10 +211,10 @@ impl Command {
                         Token::LastLine => addr.addr = AddressInfo::Last,
                         Token::Number(u64) => addr.addr = AddressInfo::Line(u64),
                         Token::Mark(char) => addr.addr = AddressInfo::Mark(char),
-                        Token::RegexForward(String) => {
-                            addr.addr = AddressInfo::RegexForward(String)
+                        Token::RegexForward(s) => {
+                            addr.addr = AddressInfo::RegexForward(s);
                         }
-                        Token::RegexBack(String) => addr.addr = AddressInfo::RegexBack(String),
+                        Token::RegexBack(s) => addr.addr = AddressInfo::RegexBack(s),
                         Token::Offset(isize) => addr.addr = AddressInfo::Offset(isize),
                         Token::Command(_) => {
                             tokens.insert(0, token);
@@ -281,12 +280,4 @@ impl Command {
             Ok(tokens) => Self::parse(tokens),
         }
     }
-}
-
-fn parse_command_list(cmd_list: &str) -> Result<Vec<Command>, String> {
-    let mut commands = Vec::new();
-    for line in cmd_list.lines() {
-        commands.push(Command::from_line(line)?)
-    }
-    Ok(commands)
 }

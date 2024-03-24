@@ -159,6 +159,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     loop {
         let mut input = String::new();
 
+        if !args.prompt.is_empty() {
+            print!("{}", args.prompt);
+        }
+
         if let Err(e) = io::stdin().read_line(&mut input) {
             eprintln!("stdout: {}", e);
             std::process::exit(1);
