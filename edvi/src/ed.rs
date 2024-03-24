@@ -23,10 +23,20 @@ use std::io::{self, BufRead, BufReader};
 
 const MAX_CHUNK: usize = 1000000;
 
+/// ed - edit text
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about)]
 struct Args {
-    pathname: String,
+    /// Use string as the prompt string when in command mode.
+    #[arg(short, long, default_value = "")]
+    prompt: String,
+
+    /// Suppress the writing of byte counts by e, E, r, and w commands
+    #[arg(short, long)]
+    silent: bool,
+
+    /// If the file argument is given, ed shall simulate an e command on the file named by the pathname, file, before accepting commands from stdin
+    file: Option<String>,
 }
 
 struct Editor {
@@ -138,33 +148,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     textdomain(PROJECT_NAME)?;
     bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
 
-    let mut state = Editor::new();
+    let mut ed = Editor::new();
 
-    match state.read_file(&args.pathname) {
-        Ok(()) => {}
-        Err(e) => {
-            eprintln!("{}: {}", args.pathname, e);
+    if let Some(pathname) = &args.file {
+        if let Err(e) = ed.read_file(pathname) {
+            eprintln!("{}: {}", pathname, e);
         }
     }
 
     loop {
         let mut input = String::new();
 
-        match io::stdin().read_line(&mut input) {
-            Ok(_n) => {}
-            Err(e) => {
-                eprintln!("stdout: {}", e);
-                std::process::exit(1);
-            }
+        if let Err(e) = io::stdin().read_line(&mut input) {
+            eprintln!("stdout: {}", e);
+            std::process::exit(1);
         }
 
         if input.is_empty() {
             break;
         }
 
-        println!("LINE={}", input);
+        println!("LINE={}", input.trim_end());
 
-        if !state.push_line(&input) {
+        if !ed.push_line(&input) {
             break;
         }
     }

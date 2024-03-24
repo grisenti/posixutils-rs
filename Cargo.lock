@@ -611,6 +611,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "posixutils-edvi"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "gettext-rs",
+ "plib",
+]
+
+[[package]]
 name = "posixutils-file"
 version = "0.1.3"
 dependencies = [

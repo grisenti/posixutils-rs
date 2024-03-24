@@ -153,7 +153,11 @@ pub enum PrintMode {
 
 impl Command {
     fn from_tokens(tokens: Vec<Token>) -> Result<Command, String> {
-        Err(String::from("not implemented yet"))
+        match tokens[0] {
+            Token::Command('q') => Ok(Command::Quit),
+            Token::Command('Q') => Ok(Command::Quit),
+            _ => unimplemented!(),
+        }
     }
 
     pub fn from_line(line: &str) -> Result<Command, String> {
