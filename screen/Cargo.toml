@@ -1,0 +1,24 @@
+[package]
+name = "posixutils-screen"
+version = "0.1.3"
+edition = "2021"
+authors = ["Jeff Garzik"]
+license = "MIT"
+repository = "https://github.com/rustcoreutils/posixutils-rs.git"
+
+[dependencies]
+plib = { path = "../plib" }
+clap = { version = "4", features = ["derive"] }
+gettext-rs = { version = "0.7", features = ["gettext-system"] }
+terminfo = "0.8"
+termios = "0.3"
+libc = "0.2"
+
+[[bin]]
+name = "stty"
+path = "src/stty.rs"
+
+[[bin]]
+name = "tput"
+path = "src/tput.rs"
+

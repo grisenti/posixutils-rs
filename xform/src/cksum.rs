@@ -10,13 +10,15 @@
 extern crate clap;
 extern crate plib;
 
+mod crc32;
+
 use clap::Parser;
-use crc32fast::Hasher;
 use gettextrs::{bind_textdomain_codeset, textdomain};
 use plib::PROJECT_NAME;
 use std::fs;
 use std::io::{self, Read};
 
+/// cksum - write file checksums and sizes
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about)]
 struct Args {
@@ -25,10 +27,16 @@ struct Args {
 }
 
 fn cksum_file(filename: &str) -> io::Result<()> {
-    let mut file = fs::File::open(filename)?;
-    let mut buffer = [0; 4096];
+    let mut file: Box<dyn Read>;
+    if filename == "" {
+        file = Box::new(io::stdin().lock());
+    } else {
+        file = Box::new(fs::File::open(filename)?);
+    }
+
+    let mut buffer = [0; plib::BUFSZ];
     let mut n_bytes: u64 = 0;
-    let mut hash = Hasher::new();
+    let mut crc: u32 = 0;
 
     loop {
         let n_read = file.read(&mut buffer[..])?;
@@ -37,12 +45,23 @@ fn cksum_file(filename: &str) -> io::Result<()> {
         }
 
         n_bytes = n_bytes + n_read as u64;
-        hash.update(&buffer[0..n_read]);
+        crc = crc32::update(crc, &buffer[0..n_read]);
     }
 
-    let checksum = hash.finalize();
-
-    println!("{} {} {}", checksum, n_bytes, filename);
+    let filename_prefix = {
+        if filename == "" {
+            ""
+        } else {
+            " "
+        }
+    };
+    println!(
+        "{} {}{}{}",
+        crc32::finalize(crc, n_bytes as usize),
+        n_bytes,
+        filename_prefix,
+        filename
+    );
 
     Ok(())
 }
@@ -54,8 +73,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     textdomain(PROJECT_NAME)?;
     bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
 
+    // if no file args, read from stdin
     if args.files.is_empty() {
-        args.files.push(String::from("-"));
+        args.files.push(String::new());
     }
 
     let mut exit_code = 0;

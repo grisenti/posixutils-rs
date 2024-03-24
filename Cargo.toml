@@ -2,14 +2,21 @@
 resolver = "2"
 
 members = [
-	"cat",
+	"calc",
 	"datetime",
+	"dev",
 	"display",
 	"edvi",
-	"link",
+	"file",
+	"fs",
+	"misc",
 	"pathnames",
 	"plib",
-	"truefalse",
+	"process",
+	"screen",
+	"sys",
+	"text",
+	"tree",
 	"users",
 	"xform"
 ]
