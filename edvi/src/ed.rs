@@ -15,7 +15,7 @@ mod command;
 
 use buffer::{Buffer, Chunk};
 use clap::Parser;
-use command::{Address, Command};
+use command::{Address, AddressInfo, Command};
 use gettextrs::{bind_textdomain_codeset, textdomain};
 use plib::PROJECT_NAME;
 use std::fs;
@@ -129,8 +129,26 @@ impl Editor {
         }
     }
 
-    fn resolve_address(&self, _addr_opt: &Option<Address>) -> Result<usize, String> {
-        todo!()
+    fn resolve_address(&self, addr_opt: &Option<Address>) -> Result<usize, String> {
+        match addr_opt {
+            None => Ok(self.buf.cur_line),
+            Some(addr) => match addr.info {
+                AddressInfo::Current => Ok(self.buf.cur_line),
+                AddressInfo::Last => Ok(self.buf.last_line),
+                AddressInfo::Line(line_no) => Ok(line_no),
+                AddressInfo::Offset(offset) => {
+                    let line_no = self.buf.cur_line as isize + offset;
+                    if line_no < 0 {
+                        Err("address out of range".to_string())
+                    } else {
+                        Ok(line_no as usize)
+                    }
+                }
+                AddressInfo::Mark(_) => unimplemented!(),
+                AddressInfo::RegexForward(_) => unimplemented!(),
+                AddressInfo::RegexBack(_) => unimplemented!(),
+            },
+        }
     }
 
     fn push_cmd(&mut self, cmd: &Command) -> bool {

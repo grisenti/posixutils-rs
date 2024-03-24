@@ -136,7 +136,7 @@ fn tokenizer(input: &str) -> Result<Vec<Token>, SyntaxError> {
 pub enum AddressInfo {
     Current,
     Last,
-    Line(u64),
+    Line(usize),
     Mark(char),
     RegexForward(String),
     RegexBack(String),
@@ -145,8 +145,8 @@ pub enum AddressInfo {
 
 #[derive(Debug)]
 pub struct Address {
-    info: AddressInfo,
-    offsets: Vec<isize>,
+    pub info: AddressInfo,
+    pub offsets: Vec<isize>,
 }
 
 impl Address {
@@ -209,13 +209,13 @@ impl Command {
                     match token {
                         Token::CurrentLine => addr.info = AddressInfo::Current,
                         Token::LastLine => addr.info = AddressInfo::Last,
-                        Token::Number(u64) => addr.info = AddressInfo::Line(u64),
-                        Token::Mark(char) => addr.info = AddressInfo::Mark(char),
+                        Token::Number(v) => addr.info = AddressInfo::Line(v as usize),
+                        Token::Mark(ch) => addr.info = AddressInfo::Mark(ch),
                         Token::RegexForward(s) => {
                             addr.info = AddressInfo::RegexForward(s);
                         }
                         Token::RegexBack(s) => addr.info = AddressInfo::RegexBack(s),
-                        Token::Offset(isize) => addr.info = AddressInfo::Offset(isize),
+                        Token::Offset(i) => addr.info = AddressInfo::Offset(i),
                         Token::Command(_) => {
                             tokens.insert(0, token);
                             state = ParseState::Command;
