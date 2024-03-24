@@ -43,8 +43,6 @@ struct Editor {
     in_cmd_mode: bool,
     buf: Buffer,
 
-    cur_line: u64,
-
     inputs: Vec<String>,
 }
 
@@ -53,7 +51,6 @@ impl Editor {
         Editor {
             in_cmd_mode: true,
             buf: Buffer::new(),
-            cur_line: 0,
             inputs: Vec::new(),
         }
     }
@@ -111,8 +108,7 @@ impl Editor {
     fn read_file(&mut self, pathname: &str) -> io::Result<()> {
         let file = fs::File::open(pathname)?;
         let mut reader = BufReader::new(file);
-        let mut line_no = 1;
-        let mut cur_chunk = Chunk::new(line_no);
+        let mut cur_chunk = Chunk::new();
 
         loop {
             let mut line = String::new();
@@ -121,12 +117,10 @@ impl Editor {
                 break;
             }
 
-            line_no = line_no + 1;
-
             cur_chunk.push_line(&line);
             if cur_chunk.len() > MAX_CHUNK {
                 self.buf.append(cur_chunk);
-                cur_chunk = Chunk::new(line_no);
+                cur_chunk = Chunk::new();
             }
         }
 
@@ -135,7 +129,6 @@ impl Editor {
         }
 
         self.buf.pathname = String::from(pathname);
-        self.cur_line = line_no - 1;
 
         Ok(())
     }
