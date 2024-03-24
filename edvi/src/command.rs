@@ -22,6 +22,8 @@ enum Token {
     RegexForward(String),
     RegexBack(String),
     Offset(isize),
+
+    AddressSeparator(char),
     Command(char),
     EOF,
 }
@@ -68,6 +70,9 @@ fn tokenizer(input: &str) -> Result<Vec<Token>, SyntaxError> {
                     }
                 }
             },
+            ',' | ';' => {
+                tokens.push(Token::AddressSeparator(ch));
+            }
             '/' | '?' => {
                 let mut bre = String::new();
                 let mut escaped = false;
@@ -128,8 +133,38 @@ fn tokenizer(input: &str) -> Result<Vec<Token>, SyntaxError> {
 }
 
 #[derive(Debug)]
+pub enum AddressInfo {
+    Current,
+    Last,
+    Line(u64),
+    Mark(char),
+    RegexForward(String),
+    RegexBack(String),
+    Offset(isize),
+}
+
+#[derive(Debug)]
+pub struct Address {
+    addr: AddressInfo,
+    offsets: Vec<isize>,
+}
+
+impl Address {
+    fn new() -> Self {
+        Address {
+            addr: AddressInfo::Current,
+            offsets: Vec::new(),
+        }
+    }
+
+    fn add_offset(&mut self, offset: isize) {
+        self.offsets.push(offset);
+    }
+}
+
+#[derive(Debug)]
 pub enum Command {
-    Append(String),
+    Append(Option<Address>),
     Change(String),
     Copy(usize),
     Delete,
@@ -151,19 +186,99 @@ pub enum PrintMode {
     PreviousLine,
 }
 
+enum ParseState {
+    Address,
+    SepOffCommand,
+    Command,
+}
+
 impl Command {
-    fn from_tokens(tokens: Vec<Token>) -> Result<Command, String> {
-        match tokens[0] {
-            Token::Command('q') => Ok(Command::Quit),
-            Token::Command('Q') => Ok(Command::Quit),
-            _ => unimplemented!(),
+    fn parse(mut tokens: Vec<Token>) -> Result<Command, String> {
+        let mut addr = Address::new();
+        let mut addr_dirty = false;
+        let mut addrvec = Vec::new();
+        let mut state = ParseState::Address;
+
+        while tokens.len() > 0 {
+            let mut done_with_token = false;
+            let token = tokens.remove(0);
+            match state {
+                // todo: handle separator indicating implicit addressing
+                ParseState::Address => {
+                    state = ParseState::SepOffCommand;
+                    addr_dirty = true;
+                    match token {
+                        Token::CurrentLine => addr.addr = AddressInfo::Current,
+                        Token::LastLine => addr.addr = AddressInfo::Last,
+                        Token::Number(u64) => addr.addr = AddressInfo::Line(u64),
+                        Token::Mark(char) => addr.addr = AddressInfo::Mark(char),
+                        Token::RegexForward(String) => {
+                            addr.addr = AddressInfo::RegexForward(String)
+                        }
+                        Token::RegexBack(String) => addr.addr = AddressInfo::RegexBack(String),
+                        Token::Offset(isize) => addr.addr = AddressInfo::Offset(isize),
+                        Token::Command(_) => {
+                            tokens.insert(0, token);
+                            state = ParseState::Command;
+                            continue;
+                        }
+                        _ => return Err(String::from("unexpected token")),
+                    }
+                }
+
+                ParseState::SepOffCommand => {
+                    if addr_dirty {
+                        addrvec.push(addr);
+                        addr = Address::new();
+                        addr_dirty = false;
+                    }
+                    match token {
+                        Token::AddressSeparator(',') => {
+                            state = ParseState::Address;
+                        }
+                        Token::AddressSeparator(':') => {
+                            state = ParseState::Address;
+                        }
+                        Token::Offset(isize) => {
+                            addr.add_offset(isize);
+                        }
+                        Token::Command(_) => {
+                            tokens.insert(0, token);
+                            state = ParseState::Command;
+                            continue;
+                        }
+                        _ => return Err(String::from("unexpected token")),
+                    }
+                }
+
+                ParseState::Command => match token {
+                    Token::Command('a') => {
+                        if addrvec.len() > 1 {
+                            return Err("append command takes at most one address".to_string());
+                        }
+                        return Ok(Command::Append(addrvec.pop()));
+                    }
+                    Token::Command('q') => {
+                        if addrvec.len() > 0 {
+                            return Err("quit command takes no address".to_string());
+                        }
+                        return Ok(Command::Quit);
+                    }
+                    Token::Command(_) => {
+                        return Err("unrecognized command".to_string());
+                    }
+                    _ => return Err(String::from("unexpected token")),
+                },
+            }
         }
+
+        Err("address-and-command parse error".to_string())
     }
 
     pub fn from_line(line: &str) -> Result<Command, String> {
         match tokenizer(line) {
             Err(e) => Err(e.message),
-            Ok(tokens) => Self::from_tokens(tokens),
+            Ok(tokens) => Self::parse(tokens),
         }
     }
 }
