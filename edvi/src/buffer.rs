@@ -36,6 +36,23 @@ impl Chunk {
         (line_no == self.first_line) || (line_no == self.last_line)
     }
 
+    pub fn line_pos(&self, line_no: usize) -> usize {
+        assert!(line_no >= self.first_line && line_no <= self.last_line);
+
+        let target_no = line_no - self.first_line;
+        let mut int_no = 0;
+        for (i, ch) in self.data.chars().enumerate() {
+            if int_no == target_no {
+                return i;
+            }
+            if ch == '\n' {
+                int_no += 1;
+            }
+        }
+
+        self.data.len() // actually a bug; only happens if a line is missing a newline
+    }
+
     pub fn push_line(&mut self, line: &str) {
         self.data.push_str(line);
         self.lines += 1;
@@ -101,11 +118,24 @@ impl Buffer {
         self.chunks.push(chunk);
     }
 
-    fn renumber(&mut self, adj: usize) {
+    fn renumber(&mut self, start_pos: usize, adj: usize) {
+        let mut pos = 0;
         for chunk in &mut self.chunks {
-            chunk.first_line += adj;
-            chunk.last_line += adj;
+            if pos >= start_pos {
+                chunk.first_line += adj;
+                chunk.last_line += adj;
+            }
+            pos += 1;
         }
+    }
+
+    fn chunk_pos_by_line(&self, line_no: usize) -> Option<usize> {
+        for (i, chunk) in self.chunks.iter().enumerate() {
+            if line_no >= chunk.first_line && line_no <= chunk.last_line {
+                return Some(i);
+            }
+        }
+        None
     }
 
     fn insert_head(&mut self, chunks: &[Chunk]) {
@@ -124,7 +154,7 @@ impl Buffer {
         }
 
         // adjust line numbers of existing chunks
-        self.renumber(total_lines);
+        self.renumber(0, total_lines);
 
         self.last_line += total_lines;
 
@@ -137,9 +167,62 @@ impl Buffer {
         }
     }
 
-    fn insert_middle(&mut self, _line_no: usize, _insert_before: bool, _chunks: &[Chunk]) {
-        // assert!(chunks.len() > 0);
-        todo!();
+    fn split_chunk(&mut self, pos: usize, line_no: usize) {
+        let orig_chunk = &self.chunks[pos];
+        let mut chunk1 = Chunk::new();
+        let mut chunk2 = Chunk::new();
+
+        let split_pos = orig_chunk.line_pos(line_no);
+
+        chunk1.data = orig_chunk.data[0..split_pos].to_string();
+        chunk1.lines = orig_chunk.lines - (line_no - orig_chunk.first_line);
+        chunk1.first_line = orig_chunk.first_line;
+        chunk1.last_line = line_no - 1;
+
+        chunk2.data = orig_chunk.data[split_pos..].to_string();
+        chunk2.lines = orig_chunk.lines - chunk1.lines;
+        chunk2.first_line = line_no;
+        chunk2.last_line = orig_chunk.last_line;
+
+        self.chunks.splice(pos..pos, vec![chunk1, chunk2]);
+    }
+
+    fn insert_middle(&mut self, mut line_no: usize, insert_before: bool, chunks: &[Chunk]) {
+        assert!(chunks.len() > 0);
+
+        // normalize insert-after to insert-before
+        if !insert_before {
+            line_no += 1;
+        }
+
+        // find the index of the chunk containing line_no
+        let mut insert_pos = self.chunk_pos_by_line(line_no).expect("line_no not found");
+
+        // if line is in the middle of a chunk, split it
+        if !chunks[insert_pos].is_edge(line_no) {
+            self.split_chunk(insert_pos, line_no);
+            insert_pos += 1;
+        }
+
+        let mut chunks = chunks.to_vec();
+
+        // total lines in insertion; assign line numbers.
+        let mut total_lines = 0;
+        let mut cur_line = line_no;
+        for chunk in &mut chunks {
+            total_lines += chunk.lines;
+            chunk.first_line = cur_line + 1;
+            chunk.last_line = chunk.first_line + chunk.lines - 1;
+            cur_line = chunk.last_line;
+        }
+
+        // adjust line numbers of existing chunks
+        self.renumber(insert_pos, total_lines);
+
+        self.last_line += total_lines;
+
+        // insert the new chunks
+        self.chunks.splice(insert_pos..insert_pos, chunks);
     }
 
     pub fn insert(&mut self, line_no: usize, insert_before: bool, chunks: &[Chunk]) {
