@@ -145,14 +145,14 @@ pub enum AddressInfo {
 
 #[derive(Debug)]
 pub struct Address {
-    addr: AddressInfo,
+    info: AddressInfo,
     offsets: Vec<isize>,
 }
 
 impl Address {
     fn new() -> Self {
         Address {
-            addr: AddressInfo::Current,
+            info: AddressInfo::Current,
             offsets: Vec::new(),
         }
     }
@@ -207,15 +207,15 @@ impl Command {
                     state = ParseState::SepOffCommand;
                     addr_dirty = true;
                     match token {
-                        Token::CurrentLine => addr.addr = AddressInfo::Current,
-                        Token::LastLine => addr.addr = AddressInfo::Last,
-                        Token::Number(u64) => addr.addr = AddressInfo::Line(u64),
-                        Token::Mark(char) => addr.addr = AddressInfo::Mark(char),
+                        Token::CurrentLine => addr.info = AddressInfo::Current,
+                        Token::LastLine => addr.info = AddressInfo::Last,
+                        Token::Number(u64) => addr.info = AddressInfo::Line(u64),
+                        Token::Mark(char) => addr.info = AddressInfo::Mark(char),
                         Token::RegexForward(s) => {
-                            addr.addr = AddressInfo::RegexForward(s);
+                            addr.info = AddressInfo::RegexForward(s);
                         }
-                        Token::RegexBack(s) => addr.addr = AddressInfo::RegexBack(s),
-                        Token::Offset(isize) => addr.addr = AddressInfo::Offset(isize),
+                        Token::RegexBack(s) => addr.info = AddressInfo::RegexBack(s),
+                        Token::Offset(isize) => addr.info = AddressInfo::Offset(isize),
                         Token::Command(_) => {
                             tokens.insert(0, token);
                             state = ParseState::Command;
