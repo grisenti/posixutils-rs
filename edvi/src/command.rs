@@ -25,7 +25,6 @@ enum Token {
 
     AddressSeparator(char),
     Command(char),
-    EOF,
 }
 
 impl SyntaxError {
@@ -128,7 +127,6 @@ fn tokenizer(input: &str) -> Result<Vec<Token>, SyntaxError> {
         }
     }
 
-    tokens.push(Token::EOF);
     Ok(tokens)
 }
 
@@ -176,7 +174,7 @@ pub enum Command {
     Print(PrintMode),
     Read(String),
     Quit,
-    Write(Option<String>),
+    Write(Option<Address>, Option<Address>, Option<String>, bool),
 }
 
 #[derive(Debug)]
@@ -216,6 +214,13 @@ impl Command {
                         }
                         Token::RegexBack(s) => addr.info = AddressInfo::RegexBack(s),
                         Token::Offset(i) => addr.info = AddressInfo::Offset(i),
+                        Token::AddressSeparator(',') => {
+                            addr.info = AddressInfo::Line(1);
+                            state = ParseState::SepOffCommand;
+                        }
+                        Token::AddressSeparator(':') => {
+                            state = ParseState::SepOffCommand;
+                        }
                         Token::Command(_) => {
                             tokens.insert(0, token);
                             state = ParseState::Command;
@@ -268,6 +273,12 @@ impl Command {
                             return Err("quit command takes no address".to_string());
                         }
                         return Ok(Command::Quit);
+                    }
+                    Token::Command('w') => {
+                        if addrvec.len() > 2 {
+                            return Err("write command takes at most two addresses".to_string());
+                        }
+                        return Ok(Command::Write(addrvec.pop(), addrvec.pop(), None, false));
                     }
                     Token::Command(_) => {
                         return Err("unrecognized command".to_string());
