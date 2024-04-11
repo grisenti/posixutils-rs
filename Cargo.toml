@@ -13,6 +13,7 @@ members = [
 	"plib",
 	"process",
 	"screen",
+	"shell",
 	"sys",
 	"text",
 	"tree",

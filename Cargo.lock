@@ -662,6 +662,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "posixutils-shell"
+version = "0.1.5"
+dependencies = [
+ "clap",
+ "gettext-rs",
+ "libc",
+ "plib",
+]
+
+[[package]]
 name = "posixutils-sys"
 version = "0.1.4"
 dependencies = [
