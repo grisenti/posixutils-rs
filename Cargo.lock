@@ -794,6 +794,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "posixutils-awk"
+version = "0.1.7"
+dependencies = [
+ "clap",
+ "lazy_static",
+ "libc",
+ "pest",
+ "pest_derive",
+ "plib",
+ "regex",
+]
+
+[[package]]
 name = "posixutils-calc"
 version = "0.1.7"
 dependencies = [
